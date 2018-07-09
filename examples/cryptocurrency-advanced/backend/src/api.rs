@@ -73,6 +73,14 @@ impl<T> CryptocurrencyApi<T>
 where
     T: TransactionSend + Clone + 'static,
 {
+    /// Endpoint for getting a single wallet.
+    fn get_wallet(&self, pub_key: &PublicKey) -> Result<Wallet, ApiError> {
+        let snapshot = self.blockchain.snapshot();
+        let schema = CurrencySchema::new(&snapshot);
+
+        Ok(schema.wallet(&pub_key).unwrap())
+    }
+
     fn wallet_info(&self, pub_key: &PublicKey) -> Result<WalletInfo, ApiError> {
         let snapshot = self.blockchain.snapshot();
         let general_schema = blockchain::Schema::new(&snapshot);
@@ -142,7 +150,16 @@ where
             let info = self.wallet_info(&pub_key)?;
             self.ok_response(&serde_json::to_value(&info).unwrap())
         };
-        router.get("/v1/wallets/info/:pubkey", wallet_info, "wallet_info");
+        router.get("/v1/wallets/:pubkey/info", wallet_info, "wallet_info");
+    }
+
+    fn wire_wallet(self, router: &mut Router) {
+        let wallet = move |req: &mut Request| -> IronResult<Response> {
+            let pub_key: PublicKey = self.url_fragment(req, "pubkey")?;
+            let info = self.get_wallet(&pub_key)?;
+            self.ok_response(&serde_json::to_value(&info).unwrap())
+        };
+        router.get("/v1/wallets/:pubkey", wallet, "wallet");
     }
 }
 
@@ -153,5 +170,6 @@ where
     fn wire(&self, router: &mut Router) {
         self.clone().wire_post_transaction(router);
         self.clone().wire_wallet_info(router);
+        self.clone().wire_wallet(router);
     }
 }
